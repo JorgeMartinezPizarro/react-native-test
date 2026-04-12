@@ -1,0 +1,2 @@
+build:	
+	./build-apk.sh

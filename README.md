@@ -19,3 +19,5 @@ npm run start
 ```
 
 To connect, install `Expo Go` on Android Store, then scan the code, then you can start debugging your app.
+
+Alternatively you can use `make build` and install the generated apk manually.
