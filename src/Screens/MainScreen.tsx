@@ -33,6 +33,7 @@ export default function LocationMap() {
 			latitude={location?.latitude}
 			longitude={location?.longitude}
 			initialZoom={18}
+			name={value}
 		/>}
 		{!location && <Text style={styles.text}>Loading ...</Text>}
 	</>);

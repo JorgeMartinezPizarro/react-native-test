@@ -39,6 +39,7 @@ interface TileMapViewProps {
   longitude: number;
   latitude: number;
   height: number;
+  name?: string;
   initialZoom?: number;
   width?: number;
   attribution?: string;
@@ -50,10 +51,11 @@ interface TileMapViewProps {
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-export default function StaticWorldMap({
+export default function TileMapView({
   longitude,
   latitude,
   height,
+  name,
   initialZoom = 13,
   width = SCREEN_W,
   attribution = '© ideniox',
@@ -96,10 +98,6 @@ export default function StaticWorldMap({
   // ─────────────────────────────────────────────
   //  Render
   // ─────────────────────────────────────────────
-  if (latitude == null || longitude == null) {
-    return <View style={[styles.container, { width, height }]} />;
-  }
-
   return (
     <View style={[styles.container, { width, height }]}>
 
@@ -118,11 +116,16 @@ export default function StaticWorldMap({
         />
       ))}
 
-      {/* Marker — always fixed at the viewport center */}
+      {/* Marker — person icon + name, always fixed at the viewport center */}
       <View pointerEvents="none" style={styles.marker}>
-        <View style={styles.markerH} />
-        <View style={styles.markerV} />
-        <View style={styles.markerDot} />
+        {/* Name label */}
+        {name ? <Text style={styles.markerName}>{name}</Text> : null}
+        {/* Person icon (SVG-like, drawn with Views) */}
+        <View style={styles.personHead} />
+        <View style={styles.personBody} />
+        {/* Pin stem */}
+        <View style={styles.pinStem} />
+        <View style={styles.pinDot} />
       </View>
 
       {/* Zoom controls */}
@@ -166,33 +169,57 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    width: 24,
-    height: 24,
-    marginLeft: -12,
-    marginTop: -12,
     alignItems: 'center',
-    justifyContent: 'center',
+    // Pin dot sits at the exact center; offset so the dot tip is at center
+    marginLeft: -20,
+    marginTop: -54,
   },
-  markerH: {
-    position: 'absolute',
+  markerName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+    backgroundColor: 'rgba(30,30,30,0.75)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  // Head
+  personHead: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#e53935',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  // Body (shoulders)
+  personBody: {
     width: 24,
-    height: 2,
-    backgroundColor: 'rgba(220,50,50,0.9)',
-    borderRadius: 1,
+    height: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    backgroundColor: '#e53935',
+    borderWidth: 2,
+    borderColor: '#fff',
+    borderBottomWidth: 0,
+    marginTop: 2,
   },
-  markerV: {
-    position: 'absolute',
+  // Stem line
+  pinStem: {
     width: 2,
-    height: 24,
-    backgroundColor: 'rgba(220,50,50,0.9)',
-    borderRadius: 1,
+    height: 10,
+    backgroundColor: '#e53935',
   },
-  markerDot: {
+  // Tip dot
+  pinDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgb(220,50,50)',
-    borderWidth: 1.5,
+    backgroundColor: '#e53935',
+    borderWidth: 1,
     borderColor: '#fff',
   },
 
