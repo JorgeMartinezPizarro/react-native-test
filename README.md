@@ -1,7 +1,21 @@
-*Basic React Native App that uses the location of the phone and display coordinates.*
+*Basic React Native App that uses the location of the phone and display in on a map.*
+
+ABOUT
+---
 
 The only purpose of the repo is to understand the basic usage of react native.
 
-It uses a copy of Open Street Maps to obtain map tiles:
+It uses my own copy of the Open Street Maps to obtain map tiles:
 
-https://maps.ideniox.com 
+[Open Streep Maps](https://maps.ideniox.com)
+
+USAGE
+---
+
+```
+nvm use 24
+npm install
+npm run start
+```
+
+To connect, install `Expo Go` on Android Store, then scan the code, then you can start debugging your app.
