@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, StyleSheet } from "react-native";
 import { useLocation } from "../Hooks/useLocation";
+import StaticWorldMap from "../Components/StaticWorldMap";
 
 export default function LocationMap() {
   const { location, error } = useLocation();
@@ -27,8 +28,13 @@ export default function LocationMap() {
 			fontSize: 40,
 			}}
         />
-		<Text style={styles.text}>X: {location?.longitude}</Text>
-		<Text style={styles.text}>Y: {location?.latitude}</Text>
+		{location && <StaticWorldMap
+			height={400}
+			latitude={location?.latitude}
+			longitude={location?.longitude}
+			initialZoom={18}
+		/>}
+		{!location && <Text style={styles.text}>Loading ...</Text>}
 	</>);
 }
 
@@ -37,6 +43,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+	verticalAlign: "middle"
   },
   text: {
     fontSize: 40,
