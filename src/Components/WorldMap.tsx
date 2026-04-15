@@ -51,7 +51,7 @@ interface TileMapViewProps {
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-export default function TileMapView({
+export default function WorldMap({
   longitude,
   latitude,
   height,
