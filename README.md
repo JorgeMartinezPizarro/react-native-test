@@ -1,4 +1,4 @@
-*Basic React Native App that uses the location of the phone and display in on a map.*
+*Basic React Native App that uses the location of the phone and display it on a map.*
 
 ABOUT
 ---
