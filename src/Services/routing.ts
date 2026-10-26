@@ -16,6 +16,9 @@ export interface RouteStep {
 }
 
 export interface WalkingRoute {
+  /** Requested start/end. The path itself starts/ends where OSRM snapped them onto a walkable way */
+  from: LatLng;
+  to: LatLng;
   coordinates: LatLng[];
   /** Meters */
   distance: number;
@@ -49,6 +52,8 @@ export async function fetchWalkingRoute(from: LatLng, to: LatLng, signal?: Abort
   if (!res.ok || data.code !== 'Ok' || !route) throw new Error(data.message ?? `Routing failed (${res.status})`);
 
   return {
+    from,
+    to,
     coordinates: route.geometry.coordinates.map(([longitude, latitude]) => ({ latitude, longitude })),
     distance: route.distance,
     duration: route.duration,

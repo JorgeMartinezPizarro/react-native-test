@@ -31,12 +31,27 @@ interface RouteSheetProps {
   route: WalkingRoute | null;
   loading: boolean;
   error: string | null;
+  /** Recalculating because the user walked off the route */
+  rerouting: boolean;
+  saved: boolean;
   stepsMaxHeight: number;
   onClose: () => void;
   onRetry: () => void;
+  onToggleSave: () => void;
 }
 
-export default function RouteSheet({ place, route, loading, error, stepsMaxHeight, onClose, onRetry }: RouteSheetProps) {
+export default function RouteSheet({
+  place,
+  route,
+  loading,
+  error,
+  rerouting,
+  saved,
+  stepsMaxHeight,
+  onClose,
+  onRetry,
+  onToggleSave,
+}: RouteSheetProps) {
   const [showSteps, setShowSteps] = useState(false);
 
   return (
@@ -49,10 +64,25 @@ export default function RouteSheet({ place, route, loading, error, stepsMaxHeigh
           <Text style={styles.title} numberOfLines={1}>{place.name}</Text>
           {place.address ? <Text style={styles.subtitle} numberOfLines={1}>{place.address}</Text> : null}
         </View>
+        <Pressable
+          onPress={onToggleSave}
+          hitSlop={8}
+          style={[styles.roundBtn, styles.saveBtn]}
+          accessibilityLabel={saved ? 'Quitar de guardados' : 'Guardar lugar'}
+        >
+          <MaterialIcons name={saved ? 'star' : 'star-border'} size={21} color={saved ? colors.favorite : colors.inkSoft} />
+        </Pressable>
         <Pressable onPress={onClose} hitSlop={8} style={styles.roundBtn} accessibilityLabel="Cerrar ruta">
           <MaterialIcons name="close" size={20} color={colors.inkSoft} />
         </Pressable>
       </View>
+
+      {rerouting ? (
+        <View style={styles.reroute}>
+          <MaterialIcons name="alt-route" size={18} color={colors.accentDark} />
+          <Text style={styles.rerouteText}>Te has desviado. Recalculando la ruta…</Text>
+        </View>
+      ) : null}
 
       {route ? (
         <>
@@ -161,6 +191,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceMuted,
+  },
+  saveBtn: {
+    marginRight: 8,
+  },
+  reroute: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.accentSoft,
+  },
+  rerouteText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.accentDark,
   },
 
   // Summary

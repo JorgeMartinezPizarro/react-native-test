@@ -1,11 +1,18 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { UserLocation } from '../Hooks/useLocation';
+import { Place } from '../Services/places';
 import { colors, shadows } from '../theme';
 import { formatCoordinate } from '../Utils/format';
 
-export default function LocationCard({ location }: { location: UserLocation }) {
+interface LocationCardProps {
+  location: UserLocation;
+  favorites: Place[];
+  onSelectFavorite: (place: Place) => void;
+}
+
+export default function LocationCard({ location, favorites, onSelectFavorite }: LocationCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.row}>
@@ -25,8 +32,31 @@ export default function LocationCard({ location }: { location: UserLocation }) {
       </View>
 
       <View style={styles.footer}>
-        <MaterialIcons name="directions-walk" size={16} color={colors.inkFaint} />
-        <Text style={styles.hint}>Busca un lugar para ir andando</Text>
+        {favorites.length ? (
+          // Saved places as one-tap shortcuts
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            style={styles.chips}
+          >
+            {favorites.map(place => (
+              <Pressable
+                key={place.id}
+                onPress={() => onSelectFavorite(place)}
+                style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
+              >
+                <MaterialIcons name="star" size={15} color={colors.favorite} />
+                <Text style={styles.chipText} numberOfLines={1}>{place.name}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <>
+            <MaterialIcons name="directions-walk" size={16} color={colors.inkFaint} />
+            <Text style={styles.hint}>Busca un lugar para ir andando</Text>
+          </>
+        )}
         {location.accuracy != null ? (
           <Text style={styles.accuracy}>± {Math.round(location.accuracy)} m</Text>
         ) : null}
@@ -102,6 +132,30 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontSize: 13,
     color: colors.inkSoft,
+  },
+  chips: {
+    flex: 1,
+    marginRight: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: 170,
+    marginRight: 8,
+    paddingLeft: 8,
+    paddingRight: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+  },
+  chipPressed: {
+    backgroundColor: colors.line,
+  },
+  chipText: {
+    marginLeft: 4,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.ink,
   },
   accuracy: {
     fontSize: 12,

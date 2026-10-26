@@ -2,6 +2,8 @@ import React, { useCallback, useState } from "react";
 import { Keyboard, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocation } from "../Hooks/useLocation";
+import { useHeading } from "../Hooks/useHeading";
+import { useFavorites } from "../Hooks/useFavorites";
 import { usePlaceSearch } from "../Hooks/usePlaceSearch";
 import { useWalkingRoute } from "../Hooks/useWalkingRoute";
 import { Place } from "../Services/places";
@@ -15,6 +17,8 @@ import PermissionScreen from "./PermissionScreen";
 
 export default function MainScreen() {
   const { location, error, retry } = useLocation();
+  const heading = useHeading(!!location);
+  const saved = useFavorites();
   const safe = useSafeAreaInsets();
   const { height: screenHeight } = useWindowDimensions();
 
@@ -49,13 +53,16 @@ export default function MainScreen() {
   if (!location) return <Loader />;
 
   const showResults = searching && query.trim().length >= 3;
+  // Focused search box without a query yet → offer the saved places
+  const showSaved = searching && !showResults && saved.favorites.length > 0;
 
   return (
     <View style={styles.container}>
       <WorldMap
         user={location}
+        heading={heading}
         destination={destination?.coordinate}
-        route={walk.route?.coordinates}
+        route={walk.route}
         insets={{ top: topInset, bottom: bottomInset }}
         onPress={closeSearch}
       />
@@ -85,6 +92,16 @@ export default function MainScreen() {
             onSelect={selectPlace}
           />
         ) : null}
+        {showSaved ? (
+          <SearchResults
+            title="Guardados"
+            results={saved.favorites}
+            origin={location}
+            maxHeight={screenHeight * 0.45}
+            onSelect={selectPlace}
+            onRemove={saved.remove}
+          />
+        ) : null}
       </View>
 
       <View
@@ -98,12 +115,15 @@ export default function MainScreen() {
             route={walk.route}
             loading={walk.loading}
             error={walk.error}
+            rerouting={walk.rerouting}
+            saved={saved.isFavorite(destination)}
             stepsMaxHeight={screenHeight * 0.3}
             onClose={clear}
             onRetry={walk.retry}
+            onToggleSave={() => saved.toggle(destination)}
           />
         ) : (
-          <LocationCard location={location} />
+          <LocationCard location={location} favorites={saved.favorites} onSelectFavorite={selectPlace} />
         )}
       </View>
     </View>

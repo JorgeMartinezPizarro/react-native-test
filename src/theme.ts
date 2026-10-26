@@ -5,6 +5,7 @@ export const colors = {
   destination: '#E5533D',
   destinationSoft: '#FDECE9',
   live: '#22C55E',
+  favorite: '#F5A524',
   ink: '#132430',
   inkSoft: '#5E6E78',
   inkFaint: '#9AA7AF',

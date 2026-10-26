@@ -31,16 +31,30 @@ function placeIcon(place: Place): IconName {
 }
 
 interface SearchResultsProps {
-  query: string;
+  query?: string;
   results: Place[];
-  loading: boolean;
-  error: string | null;
+  loading?: boolean;
+  error?: string | null;
   origin: LatLng;
   maxHeight: number;
+  /** Header shown above the list, e.g. "Guardados" */
+  title?: string;
   onSelect: (place: Place) => void;
+  /** When given, each row gets a button to remove it */
+  onRemove?: (place: Place) => void;
 }
 
-export default function SearchResults({ query, results, loading, error, origin, maxHeight, onSelect }: SearchResultsProps) {
+export default function SearchResults({
+  query = '',
+  results,
+  loading = false,
+  error = null,
+  origin,
+  maxHeight,
+  title,
+  onSelect,
+  onRemove,
+}: SearchResultsProps) {
   if (error || !results.length) {
     return (
       <View style={styles.card}>
@@ -60,6 +74,7 @@ export default function SearchResults({ query, results, loading, error, origin, 
 
   return (
     <View style={[styles.card, { maxHeight }]}>
+      {title ? <Text style={styles.title}>{title}</Text> : null}
       <ScrollView keyboardShouldPersistTaps="handled">
         {results.map((place, i) => (
           <Pressable
@@ -76,6 +91,16 @@ export default function SearchResults({ query, results, loading, error, origin, 
                 {place.address ? <Text style={styles.address} numberOfLines={1}>{place.address}</Text> : null}
               </View>
               <Text style={styles.distance}>{formatDistance(distanceMeters(origin, place.coordinate))}</Text>
+              {onRemove ? (
+                <Pressable
+                  onPress={() => onRemove(place)}
+                  hitSlop={8}
+                  style={styles.remove}
+                  accessibilityLabel="Quitar de guardados"
+                >
+                  <MaterialIcons name="close" size={16} color={colors.inkFaint} />
+                </Pressable>
+              ) : null}
             </View>
           </Pressable>
         ))}
@@ -92,10 +117,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     boxShadow: shadows.card,
   },
+  title: {
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 4,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: colors.inkFaint,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 14,
+  },
+  remove: {
+    width: 28,
+    height: 28,
+    marginLeft: 8,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
   },
   rowPressed: {
     backgroundColor: colors.surfaceMuted,

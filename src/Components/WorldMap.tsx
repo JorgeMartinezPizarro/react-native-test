@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { MAP_ATTRIBUTION, TILE_URL } from '../config';
+import { WalkingRoute } from '../Services/routing';
 import { colors, shadows } from '../theme';
 import { LatLng, Point, TILE_SIZE, metersPerPixel, project, unproject } from '../Utils/geo';
 import UserMarker from './UserMarker';
@@ -53,8 +54,10 @@ interface Insets { top: number; bottom: number }
 
 interface WorldMapProps {
   user: LatLng & { accuracy?: number | null };
+  /** Compass direction the phone points to, degrees clockwise from north */
+  heading?: number | null;
   destination?: LatLng | null;
-  route?: LatLng[] | null;
+  route?: Pick<WalkingRoute, 'from' | 'to' | 'coordinates'> | null;
   /** Space covered by floating UI (search bar on top, sheet at the bottom) */
   insets?: Insets;
   initialZoom?: number;
@@ -70,6 +73,7 @@ const NO_INSETS: Insets = { top: 0, bottom: 0 };
 
 export default function WorldMap({
   user,
+  heading,
   destination,
   route,
   insets = NO_INSETS,
@@ -135,14 +139,19 @@ export default function WorldMap({
 
   const fitToTrip = useCallback(() => {
     const { user, route, destination } = latest.current;
-    if (route?.length) fitTo([user, ...route]);
+    if (route?.coordinates.length) fitTo([user, route.from, ...route.coordinates, route.to]);
     else if (destination) fitTo([user, destination]);
   }, [fitTo]);
 
-  // New destination / route → show the whole trip. Cleared → follow the user again.
+  // New destination → show the whole trip. Same destination with a new route (recalculated
+  // while walking) → only reframe if nobody moved the map since. Cleared → follow the user again.
+  const shownDestination = useRef<LatLng | null | undefined>(null);
   useEffect(() => {
-    if (route?.length || destination) {
-      fitToTrip();
+    const sameTrip = !!destination && destination === shownDestination.current;
+    shownDestination.current = destination;
+
+    if (route?.coordinates.length || destination) {
+      if (!sameTrip || fitted.current) fitToTrip();
     } else {
       fitted.current = false;
       setFollowing(true);
@@ -266,13 +275,19 @@ export default function WorldMap({
             />
           ))}
 
-          {width && route?.length ? (
-            <RouteLine points={route.map(toScreen)} width={width} height={height} />
+          {width && route?.coordinates.length ? (
+            <RouteLine
+              from={toScreen(route.from)}
+              to={toScreen(route.to)}
+              points={route.coordinates.map(toScreen)}
+              width={width}
+              height={height}
+            />
           ) : null}
 
           {destination ? <DestinationMarker {...toScreen(destination)} /> : null}
 
-          <UserMarker x={userPoint.x} y={userPoint.y} accuracyRadius={accuracyRadius} />
+          <UserMarker x={userPoint.x} y={userPoint.y} accuracyRadius={accuracyRadius} heading={heading} />
         </View>
       </View>
 

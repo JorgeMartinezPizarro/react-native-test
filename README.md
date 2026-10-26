@@ -21,14 +21,15 @@ SERVERS
 
 All endpoints live in `src/config.ts`:
 
-| What | Default | API |
+| What | Endpoint | API |
 |---|---|---|
 | Tiles | `maps.ideniox.com/tile/{z}/{x}/{y}.png` | XYZ raster |
-| Search | `photon.komoot.io` | [Photon](https://github.com/komoot/photon) |
-| Walking routes | `routing.openstreetmap.de/routed-foot` | [OSRM](https://project-osrm.org) `foot` profile |
+| Search | `maps.ideniox.com/photon/api` | [Photon](https://github.com/komoot/photon) |
+| Walking routes | `maps.ideniox.com/osrm/route/v1/foot` | [OSRM](https://project-osrm.org) `foot` profile |
 
-Search and routing use free public instances (fair use only). To run everything on your own server,
-host Photon and OSRM (`osrm-backend` with `profiles/foot.lua`) and change the two URLs.
+Everything runs on the own server: stack `maps` of the ideniox repo (`make load-maps load-maps-services start-maps`).
+Public instances with the same APIs, for testing without it: `photon.komoot.io/api/` and
+`routing.openstreetmap.de/routed-foot/route/v1/foot` (fair use only).
 
 USAGE
 ---
