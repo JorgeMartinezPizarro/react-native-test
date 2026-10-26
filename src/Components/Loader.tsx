@@ -1,39 +1,95 @@
-import React from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { colors, shadows } from '../theme';
 
-export default function Loader() {
+interface LoaderProps {
+  title?: string;
+  subtitle?: string;
+}
+
+export default function Loader({
+  title = 'Buscando tu ubicación…',
+  subtitle = 'Activa el GPS para una mayor precisión',
+}: LoaderProps) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: 1800,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const ring = (scale: number, opacity: number) => ({
+    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [opacity, 0] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, scale] }) }],
+  });
+
   return (
-    <View style={styles.overlay}>
-  <View style={styles.card}>
-    <ActivityIndicator size="large" color="#007AFF" />
-  </View>
-</View>
+    <View style={styles.container}>
+      <View style={styles.beacon}>
+        <Animated.View style={[styles.ring, ring(2.6, 0.35)]} />
+        <Animated.View style={[styles.ring, ring(1.7, 0.5)]} />
+        <View style={styles.core}>
+          <MaterialIcons name="near-me" size={40} color="#fff" />
+        </View>
+      </View>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.subtitle}>{subtitle}</Text>
+    </View>
   );
 }
+
+const CORE = 96;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: colors.accentSoft,
   },
-	overlay: {
-	position: 'absolute',
-	top: 0,
-	left: 0,
-	right: 0,
-	bottom: 0,
-	backgroundColor: 'rgba(0,0,0,0.4)',
-	justifyContent: 'center',
-	alignItems: 'center',
+  beacon: {
+    width: CORE,
+    height: CORE,
+    marginBottom: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-	card: {
-	backgroundColor: 'white',
-	padding: 20,
-	borderRadius: 12,
-	elevation: 5, // Android
-	shadowColor: '#000', // iOS
-	shadowOpacity: 0.2,
-	shadowRadius: 10,
-  }
+  ring: {
+    position: 'absolute',
+    width: CORE,
+    height: CORE,
+    borderRadius: CORE / 2,
+    backgroundColor: colors.accent,
+  },
+  core: {
+    width: CORE,
+    height: CORE,
+    borderRadius: CORE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    boxShadow: shadows.card,
+  },
+  title: {
+    fontSize: 21,
+    fontWeight: '700',
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  subtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    color: colors.inkSoft,
+    textAlign: 'center',
+  },
 });

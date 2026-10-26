@@ -1,32 +1,46 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
   Image,
+  LayoutChangeEvent,
+  PanResponder,
+  PanResponderGestureState,
+  Pressable,
   StyleSheet,
-  Dimensions,
   Text,
-  TouchableOpacity,
+  View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { MAP_ATTRIBUTION, TILE_URL } from '../config';
+import { colors, shadows } from '../theme';
+import { LatLng, Point, TILE_SIZE, metersPerPixel, project, unproject } from '../Utils/geo';
+import UserMarker from './UserMarker';
+import DestinationMarker from './DestinationMarker';
+import RouteLine from './RouteLine';
 
 // ─────────────────────────────────────────────
-//  Tile math helpers
+//  Constants & helpers
 // ─────────────────────────────────────────────
 
-const TILE_SIZE = 256;
+const MIN_ZOOM = 3;
+const MAX_ZOOM = 18;
+// Room around a fitted trip: the pin sticks out ~20pt sideways and ~50pt upwards
+const FIT_PADDING_X = 28;
+const FIT_PADDING_Y = 56;
+const TAP_SLOP = 6;
+const DOUBLE_TAP_MS = 280;
 
-/** Longitude/Latitude → fractional tile XY (Web Mercator / XYZ) */
-function lngLatToTile(lng: number, lat: number, zoom: number) {
-  const n = Math.pow(2, zoom);
-  const x = ((lng + 180) / 360) * n;
-  const latRad = (lat * Math.PI) / 180;
-  const y =
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
-  return { x, y };
+const clampZoom = (z: number) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+
+function tileUrl(z: number, x: number, y: number) {
+  return TILE_URL.replace('{z}', String(z)).replace('{x}', String(x)).replace('{y}', String(y));
 }
 
-/** Tile URL */
-function tileUrl(z: number, x: number, y: number) {
-  return `https://maps.ideniox.com/tile/${z}/${x}/${y}.png`;
+/** Pixel bounding box of some points at the given zoom */
+function bounds(points: LatLng[], zoom: number) {
+  const px = points.map(p => project(p, zoom));
+  const xs = px.map(p => p.x);
+  const ys = px.map(p => p.y);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
 // ─────────────────────────────────────────────
@@ -34,114 +48,274 @@ function tileUrl(z: number, x: number, y: number) {
 // ─────────────────────────────────────────────
 
 interface TileKey { z: number; x: number; y: number }
+interface Gesture { dx: number; dy: number; scale: number }
+interface Insets { top: number; bottom: number }
 
-interface TileMapViewProps {
-  longitude: number;
-  latitude: number;
-  height: number;
-  name?: string;
+interface WorldMapProps {
+  user: LatLng & { accuracy?: number | null };
+  destination?: LatLng | null;
+  route?: LatLng[] | null;
+  /** Space covered by floating UI (search bar on top, sheet at the bottom) */
+  insets?: Insets;
   initialZoom?: number;
-  width?: number;
-  attribution?: string;
+  onPress?: () => void;
 }
+
+const NO_GESTURE: Gesture = { dx: 0, dy: 0, scale: 1 };
+const NO_INSETS: Insets = { top: 0, bottom: 0 };
 
 // ─────────────────────────────────────────────
 //  Component
 // ─────────────────────────────────────────────
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
 export default function WorldMap({
-  longitude,
-  latitude,
-  height,
-  name,
-  initialZoom = 13,
-  width = SCREEN_W,
-  attribution = '© ideniox',
-}: TileMapViewProps) {
-  const [zoom, setZoom] = useState(Math.round(initialZoom));
+  user,
+  destination,
+  route,
+  insets = NO_INSETS,
+  initialZoom = 17,
+  onPress,
+}: WorldMapProps) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [zoom, setZoom] = useState(initialZoom);
+  const [following, setFollowing] = useState(true);
+  const [freeCenter, setFreeCenter] = useState<LatLng>(user);
+  const [gesture, setGesture] = useState<Gesture>(NO_GESTURE);
 
-  const zoomIn  = useCallback(() => setZoom(z => Math.min(z + 1, 18)), []);
-  const zoomOut = useCallback(() => setZoom(z => Math.max(z - 1, 1)),  []);
+  // While following, the viewport stays centered on the user
+  const center = following ? user : freeCenter;
 
-  // ── Compute which tiles are visible ──────────────────────────────────────
-  // The center of the viewport is always fixed at (longitude, latitude).
-  const { tiles, canvasLeft, canvasTop } = useMemo(() => {
-    const center = lngLatToTile(longitude, latitude, zoom);
+  // Fresh values for callbacks that are created only once (PanResponder, fitTo)
+  const latest = useRef({ center, zoom, user, route, destination, insets, size, onPress });
+  latest.current = { center, zoom, user, route, destination, insets, size, onPress };
 
-    // Pixel position of the center coordinate inside the global tile canvas
-    const centerPx = center.x * TILE_SIZE;
-    const centerPy = center.y * TILE_SIZE;
+  // True while the camera still shows the last automatic fit (no user interaction since)
+  const fitted = useRef(false);
 
-    // Where tile (0,0) must be placed so the center aligns with the viewport center
-    const originLeft = width  / 2 - centerPx;
-    const originTop  = height / 2 - centerPy;
+  const zoomBy = useCallback((delta: number) => {
+    fitted.current = false;
+    setZoom(z => clampZoom(z + delta));
+  }, []);
 
-    // Visible tile range (with 1-tile margin for pre-loading)
-    const margin  = TILE_SIZE;
-    const maxTile = Math.pow(2, zoom) - 1;
+  const recenter = useCallback(() => {
+    fitted.current = false;
+    setFollowing(true);
+    setZoom(z => Math.max(z, 16));
+  }, []);
 
-    const tileMinX = Math.max(0,       Math.floor((centerPx - width  / 2 - margin) / TILE_SIZE));
-    const tileMaxX = Math.min(maxTile, Math.ceil ((centerPx + width  / 2 + margin) / TILE_SIZE));
-    const tileMinY = Math.max(0,       Math.floor((centerPy - height / 2 - margin) / TILE_SIZE));
-    const tileMaxY = Math.min(maxTile, Math.ceil ((centerPy + height / 2 + margin) / TILE_SIZE));
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setSize({ width, height });
+  }, []);
+
+  // ── Fit the camera to some points, inside the area not covered by the UI ─
+  const fitTo = useCallback((points: LatLng[]) => {
+    const { size, insets } = latest.current;
+    if (!size.width || !size.height) return;
+
+    const availW = size.width - FIT_PADDING_X * 2;
+    const availH = Math.max(80, size.height - insets.top - insets.bottom - FIT_PADDING_Y * 2);
+
+    let z = MAX_ZOOM;
+    let box = bounds(points, z);
+    while (z > MIN_ZOOM && (box.maxX - box.minX > availW || box.maxY - box.minY > availH)) {
+      z--;
+      box = bounds(points, z);
+    }
+
+    const visibleMidY = (insets.top + size.height - insets.bottom) / 2;
+    const x = (box.minX + box.maxX) / 2;
+    const y = (box.minY + box.maxY) / 2 + size.height / 2 - visibleMidY;
+
+    fitted.current = true;
+    setZoom(z);
+    setFreeCenter(unproject({ x, y }, z));
+    setFollowing(false);
+  }, []);
+
+  const fitToTrip = useCallback(() => {
+    const { user, route, destination } = latest.current;
+    if (route?.length) fitTo([user, ...route]);
+    else if (destination) fitTo([user, destination]);
+  }, [fitTo]);
+
+  // New destination / route → show the whole trip. Cleared → follow the user again.
+  useEffect(() => {
+    if (route?.length || destination) {
+      fitToTrip();
+    } else {
+      fitted.current = false;
+      setFollowing(true);
+      setZoom(initialZoom);
+    }
+  }, [route, destination, fitToTrip, initialZoom]);
+
+  // The visible area changed (layout, sheet expanded…) → refit if nobody moved the map
+  useEffect(() => {
+    if (fitted.current) fitToTrip();
+  }, [size.width, size.height, insets.top, insets.bottom, fitToTrip]);
+
+  // ── Gestures: drag to pan, pinch to zoom, double tap to zoom in ──────────
+  const pinch = useRef<{ startDistance: number; scale: number } | null>(null);
+  const lastTap = useRef(0);
+
+  const responder = useMemo(() => {
+    const commitPan = (dx: number, dy: number) => {
+      const { center, zoom } = latest.current;
+      const p = project(center, zoom);
+      fitted.current = false;
+      setFreeCenter(unproject({ x: p.x - dx, y: p.y - dy }, zoom));
+      setFollowing(false);
+    };
+
+    const end = (g: PanResponderGestureState) => {
+      if (pinch.current) {
+        const steps = Math.round(Math.log2(pinch.current.scale));
+        if (steps) zoomBy(steps);
+      } else if (Math.abs(g.dx) + Math.abs(g.dy) > TAP_SLOP) {
+        commitPan(g.dx, g.dy);
+      } else if (Date.now() - lastTap.current < DOUBLE_TAP_MS) {
+        lastTap.current = 0;
+        zoomBy(1);
+      } else {
+        lastTap.current = Date.now();
+        latest.current.onPress?.();
+      }
+      pinch.current = null;
+      setGesture(NO_GESTURE);
+    };
+
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (e, g) => {
+        const touches = e.nativeEvent.touches;
+        if (touches.length >= 2) {
+          const distance = Math.max(
+            1,
+            Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY)
+          );
+          if (!pinch.current) {
+            // Switching from drag to pinch: keep what was dragged so far
+            if (g.dx || g.dy) commitPan(g.dx, g.dy);
+            pinch.current = { startDistance: distance, scale: 1 };
+          }
+          pinch.current.scale = Math.max(0.25, Math.min(4, distance / pinch.current.startDistance));
+          setGesture({ dx: 0, dy: 0, scale: pinch.current.scale });
+        } else if (!pinch.current) {
+          setGesture({ dx: g.dx, dy: g.dy, scale: 1 });
+        }
+      },
+      onPanResponderRelease: (_, g) => end(g),
+      onPanResponderTerminate: (_, g) => end(g),
+    });
+  }, [zoomBy]);
+
+  // ── Visible tiles around the (committed) camera center ──────────────────
+  const { width, height } = size;
+  const origin = useMemo(() => project(center, zoom), [center.latitude, center.longitude, zoom]);
+
+  const tiles = useMemo(() => {
+    if (!width || !height) return [];
+    // 1-tile margin so dragging doesn't reveal empty space right away
+    const margin = TILE_SIZE;
+    const maxTile = 2 ** zoom - 1;
+    const minX = Math.max(0,       Math.floor((origin.x - width  / 2 - margin) / TILE_SIZE));
+    const maxX = Math.min(maxTile, Math.floor((origin.x + width  / 2 + margin) / TILE_SIZE));
+    const minY = Math.max(0,       Math.floor((origin.y - height / 2 - margin) / TILE_SIZE));
+    const maxY = Math.min(maxTile, Math.floor((origin.y + height / 2 + margin) / TILE_SIZE));
 
     const result: TileKey[] = [];
-    for (let tx = tileMinX; tx <= tileMaxX; tx++)
-      for (let ty = tileMinY; ty <= tileMaxY; ty++)
-        result.push({ z: zoom, x: tx, y: ty });
+    for (let x = minX; x <= maxX; x++)
+      for (let y = minY; y <= maxY; y++)
+        result.push({ z: zoom, x, y });
+    return result;
+  }, [origin, zoom, width, height]);
 
-    return { tiles: result, canvasLeft: originLeft, canvasTop: originTop };
-  }, [longitude, latitude, zoom, width, height]);
+  const toScreen = (p: LatLng): Point => {
+    const q = project(p, zoom);
+    return { x: q.x - origin.x + width / 2, y: q.y - origin.y + height / 2 };
+  };
+
+  const userPoint = toScreen(user);
+  const accuracyRadius = user.accuracy ? user.accuracy / metersPerPixel(user.latitude, zoom) : 0;
 
   // ─────────────────────────────────────────────
   //  Render
   // ─────────────────────────────────────────────
   return (
-    <View style={[styles.container, { width, height }]}>
+    <View style={styles.container} onLayout={onLayout}>
 
-      {/* Tiles */}
-      {tiles.map(({ z, x, y }) => (
-        <Image
-          key={`${z}/${x}/${y}`}
-          source={{ uri: tileUrl(z, x, y) }}
-          style={[styles.tile, {
-            left:   canvasLeft + x * TILE_SIZE,
-            top:    canvasTop  + y * TILE_SIZE,
-            width:  TILE_SIZE,
-            height: TILE_SIZE,
-          }]}
-          fadeDuration={150}
-        />
-      ))}
+      {/* Gesture surface — everything inside moves together while dragging/pinching */}
+      <View style={StyleSheet.absoluteFill} {...responder.panHandlers}>
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { transform: [{ translateX: gesture.dx }, { translateY: gesture.dy }, { scale: gesture.scale }] },
+          ]}
+        >
+          {tiles.map(({ z, x, y }) => (
+            <Image
+              key={`${z}/${x}/${y}`}
+              source={{ uri: tileUrl(z, x, y) }}
+              style={[styles.tile, {
+                left: x * TILE_SIZE - origin.x + width / 2,
+                top:  y * TILE_SIZE - origin.y + height / 2,
+              }]}
+              fadeDuration={150}
+            />
+          ))}
 
-      {/* Marker — person icon + name, always fixed at the viewport center */}
-      <View pointerEvents="none" style={styles.marker}>
-        {/* Name label */}
-        {name ? <Text style={styles.markerName}>{name}</Text> : null}
-        {/* Person icon (SVG-like, drawn with Views) */}
-        <View style={styles.personHead} />
-        <View style={styles.personBody} />
-        {/* Pin stem */}
-        <View style={styles.pinStem} />
-        <View style={styles.pinDot} />
+          {width && route?.length ? (
+            <RouteLine points={route.map(toScreen)} width={width} height={height} />
+          ) : null}
+
+          {destination ? <DestinationMarker {...toScreen(destination)} /> : null}
+
+          <UserMarker x={userPoint.x} y={userPoint.y} accuracyRadius={accuracyRadius} />
+        </View>
       </View>
 
-      {/* Zoom controls */}
-      <View style={styles.zoomControls}>
-        <TouchableOpacity style={styles.zoomBtn} onPress={zoomIn} activeOpacity={0.8}>
-          <Text style={styles.zoomBtnText}>+</Text>
-        </TouchableOpacity>
-        <View style={styles.zoomDivider} />
-        <TouchableOpacity style={styles.zoomBtn} onPress={zoomOut} activeOpacity={0.8}>
-          <Text style={styles.zoomBtnText}>−</Text>
-        </TouchableOpacity>
+      {/* Controls */}
+      <View style={[styles.controls, { bottom: insets.bottom + 16 }]} pointerEvents="box-none">
+        <View style={styles.zoomGroup}>
+          <Pressable
+            onPress={() => zoomBy(1)}
+            style={({ pressed }) => [styles.controlBtn, pressed && styles.pressed]}
+            accessibilityLabel="Acercar"
+          >
+            <MaterialIcons name="add" size={24} color={colors.ink} />
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable
+            onPress={() => zoomBy(-1)}
+            style={({ pressed }) => [styles.controlBtn, pressed && styles.pressed]}
+            accessibilityLabel="Alejar"
+          >
+            <MaterialIcons name="remove" size={24} color={colors.ink} />
+          </Pressable>
+        </View>
+
+        <Pressable
+          onPress={recenter}
+          style={({ pressed }) => [
+            styles.locateBtn,
+            following && styles.locateActive,
+            pressed && styles.pressed,
+          ]}
+          accessibilityLabel="Centrar en mi ubicación"
+        >
+          <MaterialIcons
+            name={following ? 'my-location' : 'location-searching'}
+            size={22}
+            color={following ? '#fff' : colors.accent}
+          />
+        </Pressable>
       </View>
 
       {/* Attribution */}
-      <View style={styles.attribution}>
-        <Text style={styles.attributionText}>{attribution}</Text>
+      <View pointerEvents="none" style={[styles.attribution, { bottom: insets.bottom + 6 }]}>
+        <Text style={styles.attributionText}>{MAP_ATTRIBUTION}</Text>
       </View>
 
     </View>
@@ -152,121 +326,70 @@ export default function WorldMap({
 //  Styles
 // ─────────────────────────────────────────────
 
-const CTRL = 44;
+const CTRL = 46;
 
 const styles = StyleSheet.create({
   container: {
+    ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
-    backgroundColor: '#d4cfc9',
+    backgroundColor: colors.map,
   },
   tile: {
     position: 'absolute',
-    resizeMode: 'cover',
+    width: TILE_SIZE,
+    height: TILE_SIZE,
   },
 
-  // Marker fijo en el centro del viewport
-  marker: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    alignItems: 'center',
-    // Pin dot sits at the exact center; offset so the dot tip is at center
-    marginLeft: -20,
-    marginTop: -54,
-  },
-  markerName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-    backgroundColor: 'rgba(30,30,30,0.75)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  // Head
-  personHead: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#e53935',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  // Body (shoulders)
-  personBody: {
-    width: 24,
-    height: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    backgroundColor: '#e53935',
-    borderWidth: 2,
-    borderColor: '#fff',
-    borderBottomWidth: 0,
-    marginTop: 2,
-  },
-  // Stem line
-  pinStem: {
-    width: 2,
-    height: 10,
-    backgroundColor: '#e53935',
-  },
-  // Tip dot
-  pinDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#e53935',
-    borderWidth: 1,
-    borderColor: '#fff',
-  },
-
-  // Zoom
-  zoomControls: {
+  // Controls
+  controls: {
     position: 'absolute',
     right: 16,
-    top: 16,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    alignItems: 'center',
   },
-  zoomBtn: {
+  zoomGroup: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    boxShadow: shadows.control,
+  },
+  controlBtn: {
     width: CTRL,
     height: CTRL,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  zoomBtnText: {
-    fontSize: 22,
-    fontWeight: '300',
-    color: '#333',
-    lineHeight: 26,
-  },
-  zoomDivider: {
+  divider: {
     height: 1,
-    backgroundColor: '#e0e0e0',
-    marginHorizontal: 8,
+    backgroundColor: colors.line,
+    marginHorizontal: 10,
+  },
+  locateBtn: {
+    width: CTRL,
+    height: CTRL,
+    marginTop: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    boxShadow: shadows.control,
+  },
+  locateActive: {
+    backgroundColor: colors.accent,
+  },
+  pressed: {
+    opacity: 0.6,
   },
 
   // Attribution
   attribution: {
     position: 'absolute',
-    bottom: 6,
-    right: 8,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    borderRadius: 4,
+    left: 12,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   attributionText: {
     fontSize: 10,
-    color: '#444',
+    color: colors.inkSoft,
   },
 });
