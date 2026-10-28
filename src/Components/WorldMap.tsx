@@ -24,6 +24,8 @@ import RouteLine from './RouteLine';
 
 const MIN_ZOOM = 3;
 const MAX_ZOOM = 18;
+// Street level while navigating
+const NAVIGATION_ZOOM = 18;
 // Room around a fitted trip: the pin sticks out ~20pt sideways and ~50pt upwards
 const FIT_PADDING_X = 28;
 const FIT_PADDING_Y = 56;
@@ -61,6 +63,8 @@ interface WorldMapProps {
   /** Space covered by floating UI (search bar on top, sheet at the bottom) */
   insets?: Insets;
   initialZoom?: number;
+  /** Turn-by-turn navigation: follow the user up close instead of showing the whole trip */
+  navigating?: boolean;
   onPress?: () => void;
 }
 
@@ -78,6 +82,7 @@ export default function WorldMap({
   route,
   insets = NO_INSETS,
   initialZoom = 17,
+  navigating = false,
   onPress,
 }: WorldMapProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -163,6 +168,20 @@ export default function WorldMap({
   useEffect(() => {
     if (fitted.current) fitToTrip();
   }, [size.width, size.height, insets.top, insets.bottom, fitToTrip]);
+
+  // Navigation starts → follow the user at street level (no fits meanwhile: `fitted` stays false).
+  // Navigation ends → back to the whole trip.
+  const wasNavigating = useRef(false);
+  useEffect(() => {
+    if (navigating) {
+      fitted.current = false;
+      setFollowing(true);
+      setZoom(NAVIGATION_ZOOM);
+    } else if (wasNavigating.current) {
+      fitToTrip();
+    }
+    wasNavigating.current = navigating;
+  }, [navigating, fitToTrip]);
 
   // ── Gestures: drag to pan, pinch to zoom, double tap to zoom in ──────────
   const pinch = useRef<{ startDistance: number; scale: number } | null>(null);

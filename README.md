@@ -1,3 +1,5 @@
+# Jorge Maps
+
 *Basic React Native App that uses the location of the phone and display it on a map.*
 
 ABOUT
@@ -15,6 +17,12 @@ FEATURES
 - Full screen map with your live position (accuracy circle), drag, pinch and double tap to zoom.
 - Place search bar, results sorted by proximity.
 - Walking directions: dotted route on the map, time, distance, arrival time and step by step instructions in Spanish.
+- Turn-by-turn navigation ("Iniciar"): next-maneuver banner, spoken cues ("En 50 metros, gira a la derecha") with a
+  vibration at each turn, screen kept on, rerouting when you walk off the route.
+- Navigation keeps guiding with the phone locked: like Google Maps, an Android foreground service of type location
+  ("Navegando a…" notification) feeds the navigation session (`src/Services/navigationSession.ts`), which lives
+  outside React. No "allow all the time" location permission is needed. Only in the APK (not Expo Go nor web).
+- Compass beam, smoothed and hidden while the phone's compass oscillates.
 
 SERVERS
 ---

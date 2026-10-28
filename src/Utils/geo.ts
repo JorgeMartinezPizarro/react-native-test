@@ -35,14 +35,17 @@ export function metersPerPixel(latitude: number, zoom: number) {
   return (EQUATOR_LENGTH * Math.cos(toRad(latitude))) / (TILE_SIZE * 2 ** zoom);
 }
 
-/** Shortest distance in meters from a point to a polyline (flat-earth approximation, fine at walking scale) */
-export function distanceToPath(point: LatLng, path: LatLng[]) {
+/**
+ * Closest point of a polyline to `point` (flat-earth approximation, fine at walking scale):
+ * the segment path[index] → path[index + 1], how far along it (t, 0..1) and the distance in meters.
+ */
+export function projectOnPath(point: LatLng, path: LatLng[]) {
   const kx = toRad(1) * EARTH_RADIUS * Math.cos(toRad(point.latitude));
   const ky = toRad(1) * EARTH_RADIUS;
   // Local coordinates in meters, with `point` at the origin
   const xy = (p: LatLng) => ({ x: (p.longitude - point.longitude) * kx, y: (p.latitude - point.latitude) * ky });
 
-  let best = Infinity;
+  let best = { index: 0, t: 0, distance: Infinity };
   for (let i = 0; i < path.length; i++) {
     const a = xy(path[i]);
     const b = xy(path[Math.min(i + 1, path.length - 1)]);
@@ -50,9 +53,15 @@ export function distanceToPath(point: LatLng, path: LatLng[]) {
     const dy = b.y - a.y;
     const len2 = dx * dx + dy * dy;
     const t = len2 ? Math.max(0, Math.min(1, -(a.x * dx + a.y * dy) / len2)) : 0;
-    best = Math.min(best, Math.hypot(a.x + t * dx, a.y + t * dy));
+    const distance = Math.hypot(a.x + t * dx, a.y + t * dy);
+    if (distance < best.distance) best = { index: i, t, distance };
   }
   return best;
+}
+
+/** Shortest distance in meters from a point to a polyline */
+export function distanceToPath(point: LatLng, path: LatLng[]) {
+  return projectOnPath(point, path).distance;
 }
 
 /** Great-circle distance in meters (haversine) */

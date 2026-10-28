@@ -26,6 +26,32 @@ interface UserMarkerProps {
 
 export default function UserMarker({ x, y, accuracyRadius = 0, heading }: UserMarkerProps) {
   const pulse = useRef(new Animated.Value(0)).current;
+  const rotation = useRef(new Animated.Value(0)).current;
+  const beamOpacity = useRef(new Animated.Value(0)).current;
+  // Unwrapped angle last sent to `rotation`, so 350° → 10° turns +20° instead of -340°
+  const angle = useRef<number | null>(null);
+
+  // Turn the beam smoothly; fade it out while the compass isn't trustworthy
+  useEffect(() => {
+    if (heading == null) {
+      angle.current = null;
+      Animated.timing(beamOpacity, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+      return;
+    }
+    if (angle.current == null) {
+      angle.current = heading;
+      rotation.setValue(heading);
+    } else {
+      angle.current += ((heading - angle.current) % 360 + 540) % 360 - 180;
+      Animated.timing(rotation, {
+        toValue: angle.current,
+        duration: 200,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start();
+    }
+    Animated.timing(beamOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+  }, [heading, rotation, beamOpacity]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -56,19 +82,25 @@ export default function UserMarker({ x, y, accuracyRadius = 0, heading }: UserMa
           ]}
         />
       ) : null}
-      {heading != null ? (
-        <View style={[styles.beam, { transform: [{ rotate: `${heading}deg` }] }]}>
-          <Svg width={BEAM} height={BEAM}>
-            <Defs>
-              <RadialGradient id="beam" cx={C} cy={C} r={BEAM_LENGTH} gradientUnits="userSpaceOnUse">
-                <Stop offset="0" stopColor={colors.accent} stopOpacity={0.6} />
-                <Stop offset="1" stopColor={colors.accent} stopOpacity={0} />
-              </RadialGradient>
-            </Defs>
-            <Path d={BEAM_PATH} fill="url(#beam)" />
-          </Svg>
-        </View>
-      ) : null}
+      <Animated.View
+        style={[
+          styles.beam,
+          {
+            opacity: beamOpacity,
+            transform: [{ rotate: rotation.interpolate({ inputRange: [0, 360], outputRange: ['0deg', '360deg'] }) }],
+          },
+        ]}
+      >
+        <Svg width={BEAM} height={BEAM}>
+          <Defs>
+            <RadialGradient id="beam" cx={C} cy={C} r={BEAM_LENGTH} gradientUnits="userSpaceOnUse">
+              <Stop offset="0" stopColor={colors.accent} stopOpacity={0.6} />
+              <Stop offset="1" stopColor={colors.accent} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Path d={BEAM_PATH} fill="url(#beam)" />
+        </Svg>
+      </Animated.View>
       <Animated.View style={[styles.ring, ring]} />
       <View style={styles.dot} />
     </View>

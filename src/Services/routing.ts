@@ -6,6 +6,8 @@ export interface Maneuver {
   modifier?: string;
   exit?: number;
   bearing_after: number;
+  /** [longitude, latitude], a vertex of the route geometry */
+  location: [number, number];
 }
 
 export interface RouteStep {
@@ -13,6 +15,8 @@ export interface RouteStep {
   /** Meters to walk after this maneuver */
   distance: number;
   maneuver: Maneuver;
+  /** Where the maneuver happens */
+  location: LatLng;
 }
 
 export interface WalkingRoute {
@@ -59,7 +63,12 @@ export async function fetchWalkingRoute(from: LatLng, to: LatLng, signal?: Abort
     duration: route.duration,
     steps: route.legs
       .flatMap(leg => leg.steps)
-      .map(step => ({ instruction: describe(step), distance: step.distance, maneuver: step.maneuver })),
+      .map(step => ({
+        instruction: describe(step),
+        distance: step.distance,
+        maneuver: step.maneuver,
+        location: { latitude: step.maneuver.location[1], longitude: step.maneuver.location[0] },
+      })),
   };
 }
 

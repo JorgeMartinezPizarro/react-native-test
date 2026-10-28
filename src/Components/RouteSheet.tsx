@@ -2,29 +2,10 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Place } from '../Services/places';
-import { Maneuver, RouteStep, WalkingRoute } from '../Services/routing';
+import { RouteStep, WalkingRoute } from '../Services/routing';
 import { colors, shadows } from '../theme';
 import { formatClock, formatDistance, formatDuration } from '../Utils/format';
-
-type IconName = React.ComponentProps<typeof MaterialIcons>['name'];
-
-const TURN_ICONS: Record<string, IconName> = {
-  uturn: 'u-turn-left',
-  'sharp right': 'turn-sharp-right',
-  right: 'turn-right',
-  'slight right': 'turn-slight-right',
-  straight: 'straight',
-  'slight left': 'turn-slight-left',
-  left: 'turn-left',
-  'sharp left': 'turn-sharp-left',
-};
-
-function maneuverIcon({ type, modifier }: Maneuver): IconName {
-  if (type === 'depart') return 'trip-origin';
-  if (type === 'arrive') return 'flag';
-  if (type.includes('roundabout') || type.includes('rotary')) return 'roundabout-right';
-  return TURN_ICONS[modifier ?? 'straight'] ?? 'straight';
-}
+import ManeuverIcon from './ManeuverIcon';
 
 interface RouteSheetProps {
   place: Place;
@@ -38,6 +19,8 @@ interface RouteSheetProps {
   onClose: () => void;
   onRetry: () => void;
   onToggleSave: () => void;
+  /** Start turn-by-turn navigation */
+  onStart: () => void;
 }
 
 export default function RouteSheet({
@@ -51,6 +34,7 @@ export default function RouteSheet({
   onClose,
   onRetry,
   onToggleSave,
+  onStart,
 }: RouteSheetProps) {
   const [showSteps, setShowSteps] = useState(false);
 
@@ -105,6 +89,11 @@ export default function RouteSheet({
             </Pressable>
           </View>
 
+          <Pressable onPress={onStart} style={({ pressed }) => [styles.start, pressed && styles.startPressed]}>
+            <MaterialIcons name="navigation" size={20} color="#fff" />
+            <Text style={styles.startText}>Iniciar</Text>
+          </Pressable>
+
           <Pressable
             onPress={() => setShowSteps(s => !s)}
             style={({ pressed }) => [styles.toggle, pressed && styles.togglePressed]}
@@ -143,7 +132,7 @@ function StepRow({ step }: { step: RouteStep }) {
   return (
     <View style={styles.step}>
       <View style={styles.stepIcon}>
-        <MaterialIcons name={maneuverIcon(step.maneuver)} size={20} color={colors.accentDark} />
+        <ManeuverIcon maneuver={step.maneuver} size={20} color={colors.accentDark} />
       </View>
       <Text style={styles.stepText}>{step.instruction}</Text>
       {step.distance > 0 ? <Text style={styles.stepDistance}>{formatDistance(step.distance)}</Text> : null}
@@ -242,6 +231,25 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontSize: 13,
     color: colors.inkSoft,
+  },
+
+  start: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 13,
+    borderRadius: 16,
+    backgroundColor: colors.accent,
+  },
+  startPressed: {
+    backgroundColor: colors.accentDark,
+  },
+  startText: {
+    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
 
   // Steps

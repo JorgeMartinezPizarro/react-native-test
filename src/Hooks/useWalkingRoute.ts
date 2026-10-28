@@ -17,8 +17,11 @@ type State = {
   error: string | null;
 };
 
-/** Walking route from the current position to `destination`, recalculated when the user walks off it */
-export function useWalkingRoute(destination: LatLng | null, origin: Origin | null) {
+/**
+ * Walking route from the current position to `destination`, recalculated when the user walks off it
+ * (unless `autoReroute` is off: while navigating, the navigation session reroutes on its own).
+ */
+export function useWalkingRoute(destination: LatLng | null, origin: Origin | null, autoReroute = true) {
   const [state, setState] = useState<State>({ target: null, route: null, loading: false, rerouting: false, error: null });
   const [attempt, setAttempt] = useState(0);
 
@@ -64,7 +67,7 @@ export function useWalkingRoute(destination: LatLng | null, origin: Origin | nul
   // Every GPS fix: walked away from the route? Recalculate from here.
   useEffect(() => {
     const { route, loading, target } = stateRef.current;
-    if (!origin || !route || loading || target !== destination) {
+    if (!autoReroute || !origin || !route || loading || target !== destination) {
       offRouteFixes.current = 0;
       return;
     }
@@ -78,7 +81,7 @@ export function useWalkingRoute(destination: LatLng | null, origin: Origin | nul
       rerouteRequested.current = true;
       setAttempt((a) => a + 1);
     }
-  }, [origin, destination]);
+  }, [origin, destination, autoReroute]);
 
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
 
