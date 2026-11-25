@@ -1,80 +1,52 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Polyline } from 'react-native-svg';
 import { colors } from '../theme';
 import { Point } from '../Utils/geo';
 
-// Gaps smaller than this (in screen points) are hidden under the markers anyway
-const MIN_GAP = 6;
+const DOT = 11;
+const CONNECTOR_DOT = 8;
 
 interface RouteLineProps {
-  /** Requested start/end — may be off the walkable network the route was snapped to */
-  from: Point;
-  to: Point;
-  points: Point[];
-  width: number;
-  height: number;
+  /** Dots of the walking route, in map-layer coordinates */
+  dots: Point[];
+  /** Grey dots bridging the gaps to the real start/end (off the walkable network) */
+  connectors: Point[];
 }
 
-const toSvg = (points: Point[]) => points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-
-/** Dotted walking route, drawn in screen coordinates, plus grey dots bridging the gaps to the real start/end */
-export default function RouteLine({ from, to, points, width, height }: RouteLineProps) {
-  // Skip points closer than ~2px to the previous one, they add nothing visible
-  const kept: Point[] = [];
-  for (const p of points) {
-    const last = kept[kept.length - 1];
-    if (!last || Math.abs(p.x - last.x) + Math.abs(p.y - last.y) > 2) kept.push(p);
-  }
-  const path = toSvg(kept);
-
-  const connectors = [
-    [from, points[0]],
-    [points[points.length - 1], to],
-  ].filter(([a, b]) => Math.hypot(a.x - b.x, a.y - b.y) > MIN_GAP);
-
+/**
+ * Dotted walking route. Plain views lying on the map plane rather than an SVG: they turn and tilt with the
+ * 3D navigation view, and only the visible ones exist (an SVG big enough for the 3D view would be huge).
+ */
+export default function RouteLine({ dots, connectors }: RouteLineProps) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Svg width={width} height={height}>
-        {connectors.map((segment, i) => (
-          <React.Fragment key={i}>
-            <Polyline
-              points={toSvg(segment)}
-              fill="none"
-              stroke="#fff"
-              strokeWidth={8}
-              strokeLinecap="round"
-              strokeDasharray="1 10"
-            />
-            <Polyline
-              points={toSvg(segment)}
-              fill="none"
-              stroke={colors.inkFaint}
-              strokeWidth={5}
-              strokeLinecap="round"
-              strokeDasharray="1 10"
-            />
-          </React.Fragment>
-        ))}
-        <Polyline
-          points={path}
-          fill="none"
-          stroke="#fff"
-          strokeWidth={11}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeDasharray="1 13"
-        />
-        <Polyline
-          points={path}
-          fill="none"
-          stroke={colors.accent}
-          strokeWidth={7}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeDasharray="1 13"
-        />
-      </Svg>
+      {connectors.map((p, i) => (
+        <View key={`c${i}`} style={[styles.connector, { left: p.x - CONNECTOR_DOT / 2, top: p.y - CONNECTOR_DOT / 2 }]} />
+      ))}
+      {dots.map((p, i) => (
+        <View key={i} style={[styles.dot, { left: p.x - DOT / 2, top: p.y - DOT / 2 }]} />
+      ))}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  dot: {
+    position: 'absolute',
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    borderWidth: 2,
+    borderColor: '#fff',
+    backgroundColor: colors.accent,
+  },
+  connector: {
+    position: 'absolute',
+    width: CONNECTOR_DOT,
+    height: CONNECTOR_DOT,
+    borderRadius: CONNECTOR_DOT / 2,
+    borderWidth: 1.5,
+    borderColor: '#fff',
+    backgroundColor: colors.inkFaint,
+  },
+});

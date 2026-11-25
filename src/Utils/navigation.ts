@@ -1,6 +1,6 @@
 // Turn-by-turn guidance: where the user is along the route, which maneuver comes next and what to say about it.
 import { WalkingRoute } from '../Services/routing';
-import { LatLng, distanceMeters, projectOnPath } from './geo';
+import { LatLng, bearingTo, distanceMeters, projectOnPath } from './geo';
 
 // A maneuver is announced twice: a heads-up at PREPARE meters, then "now" at NOW meters
 const PREPARE_METERS = 50;
@@ -9,6 +9,8 @@ const NOW_METERS = 15;
 const MIN_STRETCH_FOR_PREPARE = 80;
 // A maneuver this close after another one is said in the same sentence: "…, y luego gira a la izquierda"
 const THEN_METERS = 25;
+// The map faces the route this far ahead: far enough to ignore tiny zigzags, close enough to turn at corners
+const LOOKAHEAD_METERS = 20;
 
 export interface RouteIndex {
   route: WalkingRoute;
@@ -26,6 +28,8 @@ export interface NavProgress {
   /** Seconds, at the route's own pace */
   remainingDuration: number;
   arrived: boolean;
+  /** Direction of the route just ahead, degrees clockwise from north: what the 3D map faces */
+  bearing: number;
 }
 
 export interface Cue {
@@ -79,7 +83,25 @@ export function progressAlong({ route, along, stepAlong }: RouteIndex, position:
     remainingDistance,
     remainingDuration: total > 0 ? (remainingDistance * route.duration) / total : 0,
     arrived: next === last && distanceToNext <= NOW_METERS,
+    bearing: bearingAhead(coords, along, done),
   };
+}
+
+/** Point of the route `meters` along it */
+function pointAlong(coords: LatLng[], along: number[], meters: number): LatLng {
+  const j = along.findIndex(a => a >= meters);
+  if (j <= 0) return coords[j < 0 ? coords.length - 1 : 0];
+  const t = (meters - along[j - 1]) / (along[j] - along[j - 1] || 1);
+  const a = coords[j - 1];
+  const b = coords[j];
+  return { latitude: a.latitude + (b.latitude - a.latitude) * t, longitude: a.longitude + (b.longitude - a.longitude) * t };
+}
+
+/** Direction from where the user is on the route to LOOKAHEAD meters further (the last stretch at the end) */
+function bearingAhead(coords: LatLng[], along: number[], done: number) {
+  const total = along[along.length - 1];
+  const from = Math.min(done, Math.max(0, total - LOOKAHEAD_METERS));
+  return bearingTo(pointAlong(coords, along, from), pointAlong(coords, along, from + LOOKAHEAD_METERS));
 }
 
 /** What to say now, if anything: each maneuver gets a heads-up and a "now", once */

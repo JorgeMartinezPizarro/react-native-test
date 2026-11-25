@@ -22,6 +22,10 @@ FEATURES
 - Navigation keeps guiding with the phone locked: like Google Maps, an Android foreground service of type location
   ("Navegando a…" notification) feeds the navigation session (`src/Services/navigationSession.ts`), which lives
   outside React. No "allow all the time" location permission is needed. Only in the APK (not Expo Go nor web).
+- 3D navigation view, like Google Maps: the map turns so the route ahead points up and tilts back in perspective
+  (`src/Utils/perspective.ts` works out which tiles and route dots are on screen), the user is a chevron on the ground,
+  the destination pin stands upright, only the part of the route left is drawn. Dragging the map goes back to 2D;
+  the locate button returns to 3D.
 - Compass beam, smoothed and hidden while the phone's compass oscillates.
 
 SERVERS

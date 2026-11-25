@@ -93,6 +93,7 @@ export default function MainScreen() {
         route={nav ? nav.route : walk.route}
         insets={{ top: topInset, bottom: bottomInset }}
         navigating={!!nav}
+        bearing={nav?.progress?.bearing ?? null}
         onPress={closeSearch}
       />
 

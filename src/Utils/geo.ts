@@ -64,6 +64,33 @@ export function distanceToPath(point: LatLng, path: LatLng[]) {
   return projectOnPath(point, path).distance;
 }
 
+/** Points every `spacing` along a polyline (any pixel space), starting at its first point */
+export function sampleAlong(points: Point[], spacing: number): Point[] {
+  if (!points.length) return [];
+  const out: Point[] = [points[0]];
+  let next = spacing; // distance along the polyline of the next sample
+  let walked = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    while (next <= walked + length) {
+      const t = length ? (next - walked) / length : 0;
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      next += spacing;
+    }
+    walked += length;
+  }
+  return out;
+}
+
+/** Direction from a to b in degrees clockwise from north (flat-earth, fine at walking scale) */
+export function bearingTo(a: LatLng, b: LatLng) {
+  const dx = (b.longitude - a.longitude) * Math.cos(toRad((a.latitude + b.latitude) / 2));
+  const dy = b.latitude - a.latitude;
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
+}
+
 /** Great-circle distance in meters (haversine) */
 export function distanceMeters(a: LatLng, b: LatLng) {
   const dLat = toRad(b.latitude - a.latitude);
